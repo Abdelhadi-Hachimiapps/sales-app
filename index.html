@@ -898,10 +898,84 @@ body {
     ➕ إنشاء طلب جديد لهذا الزبون
   </button>
 
+  <button onclick="openVisitModal()"
+    style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:14px;
+    border-radius:16px;border:1.5px solid var(--accent);background:transparent;
+    color:var(--accent);font-family:'Cairo',sans-serif;font-size:0.95rem;
+    font-weight:800;cursor:pointer;text-align:center;">
+    📍 تسجيل زيارة بدون طلبية
+  </button>
+
   <div class="section-header">
     <h3>آخر الطلبات</h3>
   </div>
   <div class="orders-list" id="customer-orders-list"></div>
+</div>
+
+<!-- ===== VISIT MODAL ===== -->
+<div class="modal-overlay" id="visit-modal" onclick="if(event.target.id==='visit-modal')closeVisitModal()">
+  <div class="modal-sheet" style="padding-bottom:32px;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📍 تسجيل زيارة</div>
+    <div style="padding:0 16px 4px;font-size:0.8rem;color:var(--text2);text-align:center;" id="visit-modal-customer-name"></div>
+
+    <!-- حالة المحل -->
+    <div style="padding:16px 16px 0;">
+      <div style="font-size:0.78rem;color:var(--text2);margin-bottom:8px;font-weight:700;">🚪 حالة المحل</div>
+      <div style="display:flex;gap:10px;">
+        <button id="vbtn-open" onclick="selectVisitStatus('open')"
+          style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
+          color:var(--text2);font-family:'Cairo',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;">
+          🟢 مفتوح
+        </button>
+        <button id="vbtn-closed" onclick="selectVisitStatus('closed')"
+          style="flex:1;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
+          color:var(--text2);font-family:'Cairo',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;">
+          🔴 مغلق
+        </button>
+      </div>
+    </div>
+
+    <!-- سبب عدم الطلب — يظهر فقط إذا المحل مفتوح -->
+    <div id="visit-motif-section" style="padding:12px 16px 0;display:none;">
+      <div style="font-size:0.78rem;color:var(--text2);margin-bottom:8px;font-weight:700;">📝 سبب عدم الطلب</div>
+      <select id="visit-motif" style="width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--border);
+        background:var(--surface);color:var(--text1);font-family:'Cairo',sans-serif;font-size:0.88rem;
+        appearance:none;-webkit-appearance:none;cursor:pointer;">
+        <option value="">— اختر السبب —</option>
+        <option value="مخزون كافٍ">📦 مخزون كافٍ</option>
+        <option value="لا يملك سيولة">💸 لا يملك سيولة</option>
+        <option value="المحل في حالة جرد">📋 المحل في حالة جرد</option>
+        <option value="غياب المسؤول عن المشتريات">👤 غياب المسؤول عن المشتريات</option>
+        <option value="أخرى">✏️ أخرى</option>
+      </select>
+    </div>
+
+    <!-- ملاحظات -->
+    <div style="padding:12px 16px 0;">
+      <div style="font-size:0.78rem;color:var(--text2);margin-bottom:8px;font-weight:700;">💬 ملاحظات (اختياري)</div>
+      <textarea id="visit-notes" rows="2" placeholder="أي تفاصيل إضافية..."
+        style="width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--border);
+        background:var(--surface);color:var(--text1);font-family:'Cairo',sans-serif;font-size:0.88rem;
+        resize:none;box-sizing:border-box;"></textarea>
+    </div>
+
+    <!-- معلومات تلقائية -->
+    <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:4px;">
+      <div style="font-size:0.72rem;color:var(--text2);">🕒 <span id="visit-time-display"></span></div>
+      <div style="font-size:0.72rem;color:var(--text2);">🗺️ <span id="visit-gps-display">جاري تحديد الموقع...</span></div>
+    </div>
+
+    <!-- زر الحفظ -->
+    <div style="padding:16px 16px 0;">
+      <button onclick="saveVisitAndSendWhatsApp()"
+        style="width:100%;padding:15px;border:none;border-radius:14px;
+        background:linear-gradient(135deg,var(--accent2),var(--accent));
+        color:#0f1923;font-family:'Cairo',sans-serif;font-size:1rem;font-weight:900;cursor:pointer;">
+        💾 حفظ وإرسال تقرير واتساب
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== NEW ORDER SCREEN ===== -->
@@ -2454,7 +2528,138 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-// تحديث زر الزيارة بناءً على الموقع
+// ===== VISIT MODAL =====
+let _visitStatus = null;
+
+function openVisitModal() {
+  if(!currentCustomer) return;
+  _visitStatus = null;
+
+  // إعادة تعيين الحقول
+  document.getElementById('visit-motif').value = '';
+  document.getElementById('visit-notes').value = '';
+  document.getElementById('visit-motif-section').style.display = 'none';
+
+  // إعادة تعيين أزرار الحالة
+  ['vbtn-open','vbtn-closed'].forEach(function(id) {
+    var btn = document.getElementById(id);
+    btn.style.background = 'var(--surface)';
+    btn.style.color      = 'var(--text2)';
+    btn.style.borderColor = 'var(--border)';
+  });
+
+  // اسم الزبون
+  document.getElementById('visit-modal-customer-name').textContent = currentCustomer.name + ' (' + currentCustomer.code + ')';
+
+  // الوقت الحالي
+  var now = new Date();
+  document.getElementById('visit-time-display').textContent =
+    now.toLocaleDateString('ar-DZ') + ' — ' + now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+
+  // GPS
+  if(currentUserLat && currentUserLng) {
+    document.getElementById('visit-gps-display').textContent =
+      'lat: ' + currentUserLat.toFixed(5) + ', lng: ' + currentUserLng.toFixed(5);
+  } else {
+    document.getElementById('visit-gps-display').textContent = 'جاري تحديد الموقع...';
+  }
+
+  document.getElementById('visit-modal').classList.add('open');
+}
+
+function closeVisitModal() {
+  document.getElementById('visit-modal').classList.remove('open');
+}
+
+function selectVisitStatus(status) {
+  _visitStatus = status;
+  var isOpen   = status === 'open';
+
+  // تلوين الأزرار
+  var btnOpen   = document.getElementById('vbtn-open');
+  var btnClosed = document.getElementById('vbtn-closed');
+
+  btnOpen.style.background   = isOpen  ? 'rgba(0,200,150,0.2)' : 'var(--surface)';
+  btnOpen.style.color        = isOpen  ? 'var(--accent)'        : 'var(--text2)';
+  btnOpen.style.borderColor  = isOpen  ? 'var(--accent)'        : 'var(--border)';
+
+  btnClosed.style.background  = !isOpen ? 'rgba(255,77,109,0.15)' : 'var(--surface)';
+  btnClosed.style.color       = !isOpen ? '#ff6b6b'                : 'var(--text2)';
+  btnClosed.style.borderColor = !isOpen ? '#ff6b6b'                : 'var(--border)';
+
+  // إظهار/إخفاء حقل السبب
+  document.getElementById('visit-motif-section').style.display = isOpen ? 'block' : 'none';
+  if(!isOpen) document.getElementById('visit-motif').value = '';
+}
+
+async function saveVisitAndSendWhatsApp() {
+  if(!currentCustomer) return;
+  if(!_visitStatus) { showToast('⚠️ اختر حالة المحل أولاً'); return; }
+
+  const c      = currentCustomer;
+  const now    = new Date();
+  const date   = now.toLocaleDateString('en-GB');
+  const time   = now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+  const motif  = document.getElementById('visit-motif').value;
+  const notes  = document.getElementById('visit-notes').value.trim();
+  const isOpen = _visitStatus === 'open';
+  const statusLabel = isOpen ? 'مفتوح 🟢' : 'مغلق 🔴';
+
+  const visit = {
+    type:         'visit',
+    customerCode: c.code,
+    customerName: c.name,
+    salesman:     currentUser ? currentUser.name : 'بائع',
+    date:         date,
+    time:         time,
+    lat:          currentUserLat || '',
+    lng:          currentUserLng || '',
+    distance:     0,
+    shopStatus:   _visitStatus,
+    motif:        isOpen ? (motif || '') : '',
+    notes:        notes
+  };
+
+  showLoading('⏳ جاري تسجيل الزيارة...');
+  try {
+    await postToSheets(visit);
+    visits.push(visit);
+
+    // تحديث واجهة الزبون
+    const custVisits = visits.filter(function(v){ return v.customerCode === c.code; });
+    var vcEl = document.getElementById('detail-visit-count');
+    var vlEl = document.getElementById('detail-last-visit');
+    if(vcEl) vcEl.textContent = custVisits.length + ' زيارة';
+    if(vlEl) vlEl.textContent = date + ' ' + time;
+
+    showToast('✅ تم تسجيل الزيارة!');
+    closeVisitModal();
+
+    // بناء رسالة واتساب
+    var gpsLink = (currentUserLat && currentUserLng)
+      ? 'https://maps.google.com/?q=' + currentUserLat + ',' + currentUserLng
+      : 'غير متاح';
+
+    var msg =
+`📍 *تقرير زيارة (بدون طلبية)*
+━━━━━━━━━━━━━━━
+👤 *الزبون:* ${c.name} (${c.code})
+🏙️ *المدينة:* ${c.city || '—'}
+🚪 *حالة المحل:* ${statusLabel}` +
+(isOpen && motif ? `\n📝 *السبب:* ${motif}` : '') +
+(notes           ? `\n💬 *ملاحظات:* ${notes}` : '') +
+`\n🕒 *الوقت:* ${time} — ${date}
+👤 *المندوب:* ${currentUser ? currentUser.name : 'بائع'}
+🗺️ *الموقع:* ${gpsLink}`;
+
+    const url = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(msg);
+    setTimeout(function(){ window.open(url, '_blank'); }, 600);
+
+  } catch(e) {
+    showToast('⚠️ تعذر حفظ الزيارة — تحقق من الاتصال');
+  }
+  hideLoading();
+}
 function updateVisitBtn() {
   const btn = document.getElementById('visit-btn');
   if(!btn || !currentCustomer) return;
